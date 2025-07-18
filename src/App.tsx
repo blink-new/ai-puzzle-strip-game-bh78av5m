@@ -11,7 +11,7 @@ import { Button } from './components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card'
 import { Sparkles, RefreshCw } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { toast } from 'react-hot-toast'
+import { toast, Toaster } from 'react-hot-toast'
 
 function App() {
   const [user, setUser] = useState(null)
@@ -70,7 +70,7 @@ function App() {
       
       const puzzleType = Math.random() > 0.5 ? 'riddle' : 'trivia'
       const { text } = await blink.ai.generateText({
-        prompt: `Create a ${difficulty} ${puzzleType} puzzle. Respond with ONLY a JSON object, no other text or formatting.
+        prompt: `Create a ${difficulty} ${puzzleType} puzzle. Return ONLY valid JSON with no markdown formatting, no code blocks, no backticks, no extra text.
 
 Requirements:
 - Difficulty: ${difficulty}
@@ -80,34 +80,51 @@ Requirements:
 - Helpful hint
 - Appropriate for all ages
 
-Return this exact JSON structure:
-{"question": "Your puzzle question", "answer": "correct answer", "hint": "helpful hint", "type": "${puzzleType}"}`,
+Return EXACTLY this JSON structure with no additional formatting:
+{"question": "Your puzzle question", "answer": "correct answer", "hint": "helpful hint", "type": "${puzzleType}"}
+
+Do not wrap in code blocks or use any markdown formatting. Return raw JSON only.`,
         model: 'gpt-4o-mini'
       })
       
-      // Extract JSON from potential markdown code blocks
-      let jsonText = text.trim()
-      if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '')
-      } else if (jsonText.startsWith('```')) {
-        jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '')
+      // Extract JSON from AI response with robust parsing
+      const extractJSON = (text: string) => {
+        let cleanText = text.trim()
+        
+        // Remove markdown code blocks
+        cleanText = cleanText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
+        
+        // Remove any remaining backticks
+        cleanText = cleanText.replace(/^`+|`+$/g, '')
+        
+        // Find JSON object boundaries
+        const jsonStart = cleanText.indexOf('{')
+        const jsonEnd = cleanText.lastIndexOf('}')
+        
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+          cleanText = cleanText.substring(jsonStart, jsonEnd + 1)
+        }
+        
+        return cleanText.trim()
       }
-      
-      // Additional cleanup for any remaining backticks or formatting
-      jsonText = jsonText.replace(/^`+|`+$/g, '').trim()
       
       let puzzleData
       try {
+        const jsonText = extractJSON(text)
+        console.log('Attempting to parse JSON:', jsonText)
         puzzleData = JSON.parse(jsonText)
       } catch (parseError) {
         console.error('JSON Parse Error:', parseError)
-        console.error('Raw text:', text)
-        console.error('Cleaned text:', jsonText)
-        throw new Error('Failed to parse AI response as JSON')
+        console.error('Raw AI response:', text)
+        console.error('Extracted text:', extractJSON(text))
+        
+        // Use fallback puzzle instead of throwing error
+        console.warn('Using fallback puzzle due to parsing error')
+        puzzleData = null
       }
       
       // Validate required fields
-      if (!puzzleData.question || !puzzleData.answer || !puzzleData.type) {
+      if (!puzzleData || !puzzleData.question || !puzzleData.answer || !puzzleData.type) {
         console.warn('AI response missing required fields, using fallback puzzle')
         // Fallback puzzles
         const fallbackPuzzles = {
@@ -368,6 +385,19 @@ Return this exact JSON structure:
         isOpen={showUnlockModal}
         onClose={() => setShowUnlockModal(false)}
         unlockedItem={unlockedItem}
+      />
+
+      {/* Toast Notifications */}
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: 'rgba(139, 92, 246, 0.9)',
+            color: '#fff',
+            border: '1px solid rgba(139, 92, 246, 0.3)',
+          },
+        }}
       />
     </div>
   )

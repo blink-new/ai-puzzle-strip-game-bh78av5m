@@ -1,5 +1,5 @@
 import { ClothingItem } from '../types/game'
-import { Dialog, DialogContent } from './ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from './ui/dialog'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'
 import { Sparkles, Gift } from 'lucide-react'
@@ -17,6 +17,7 @@ export function UnlockModal({ isOpen, onClose, unlockedItem }: UnlockModalProps)
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-gradient-to-br from-purple-900/95 to-blue-900/95 border-purple-500/50 max-w-md">
+        <DialogTitle className="sr-only">New Item Unlocked</DialogTitle>
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
