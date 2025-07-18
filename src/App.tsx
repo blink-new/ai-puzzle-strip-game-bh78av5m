@@ -68,27 +68,65 @@ function App() {
       const reward = availableRewards[Math.floor(Math.random() * availableRewards.length)]
       const difficulty = reward.level <= 3 ? 'easy' : reward.level <= 6 ? 'medium' : 'hard'
       
+      const puzzleType = Math.random() > 0.5 ? 'riddle' : 'trivia'
       const { text } = await blink.ai.generateText({
-        prompt: `Generate a ${difficulty} ${Math.random() > 0.5 ? 'riddle' : 'trivia'} puzzle. 
-        
-        Requirements:
-        - Difficulty: ${difficulty}
-        - Should be fun and engaging
-        - Include a clear question and a specific answer
-        - Provide a helpful hint
-        - Keep it appropriate for all ages
-        
-        Format your response as JSON:
-        {
-          "question": "Your puzzle question here",
-          "answer": "The correct answer",
-          "hint": "A helpful hint",
-          "type": "riddle" or "trivia"
-        }`,
+        prompt: `Create a ${difficulty} ${puzzleType} puzzle. Respond with ONLY a JSON object, no other text or formatting.
+
+Requirements:
+- Difficulty: ${difficulty}
+- Type: ${puzzleType}
+- Fun and engaging
+- Clear question with specific answer
+- Helpful hint
+- Appropriate for all ages
+
+Return this exact JSON structure:
+{"question": "Your puzzle question", "answer": "correct answer", "hint": "helpful hint", "type": "${puzzleType}"}`,
         model: 'gpt-4o-mini'
       })
       
-      const puzzleData = JSON.parse(text)
+      // Extract JSON from potential markdown code blocks
+      let jsonText = text.trim()
+      if (jsonText.startsWith('```json')) {
+        jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '')
+      } else if (jsonText.startsWith('```')) {
+        jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '')
+      }
+      
+      // Additional cleanup for any remaining backticks or formatting
+      jsonText = jsonText.replace(/^`+|`+$/g, '').trim()
+      
+      let puzzleData
+      try {
+        puzzleData = JSON.parse(jsonText)
+      } catch (parseError) {
+        console.error('JSON Parse Error:', parseError)
+        console.error('Raw text:', text)
+        console.error('Cleaned text:', jsonText)
+        throw new Error('Failed to parse AI response as JSON')
+      }
+      
+      // Validate required fields
+      if (!puzzleData.question || !puzzleData.answer || !puzzleData.type) {
+        console.warn('AI response missing required fields, using fallback puzzle')
+        // Fallback puzzles
+        const fallbackPuzzles = {
+          easy: [
+            { question: "What has keys but no locks?", answer: "piano", hint: "It makes music!", type: "riddle" },
+            { question: "What is 5 + 3?", answer: "8", hint: "Count on your fingers!", type: "trivia" }
+          ],
+          medium: [
+            { question: "I am tall when I am young, and I am short when I am old. What am I?", answer: "candle", hint: "I give light and melt away", type: "riddle" },
+            { question: "What is the capital of France?", answer: "paris", hint: "City of lights!", type: "trivia" }
+          ],
+          hard: [
+            { question: "The more you take, the more you leave behind. What am I?", answer: "footsteps", hint: "Think about walking", type: "riddle" },
+            { question: "What year did World War II end?", answer: "1945", hint: "Mid-1940s", type: "trivia" }
+          ]
+        }
+        const fallbacks = fallbackPuzzles[difficulty]
+        puzzleData = fallbacks[Math.floor(Math.random() * fallbacks.length)]
+      }
       
       const newPuzzle: Puzzle = {
         id: `puzzle-${Date.now()}`,
@@ -96,14 +134,45 @@ function App() {
         answer: puzzleData.answer.toLowerCase().trim(),
         difficulty,
         type: puzzleData.type,
-        hint: puzzleData.hint,
+        hint: puzzleData.hint || 'Think carefully about the question...',
         reward
       }
       
       setGameState(prev => ({ ...prev, currentPuzzle: newPuzzle }))
     } catch (error) {
       console.error('Error generating puzzle:', error)
-      toast.error('Failed to generate puzzle. Please try again!')
+      
+      // Create a simple fallback puzzle if everything fails
+      const simpleFallback = {
+        easy: { question: "What color do you get when you mix red and blue?", answer: "purple", hint: "Think about primary colors!", type: "trivia" },
+        medium: { question: "I have cities, but no houses. I have mountains, but no trees. What am I?", answer: "map", hint: "I help you find your way", type: "riddle" },
+        hard: { question: "What comes once in a minute, twice in a moment, but never in a thousand years?", answer: "m", hint: "Look at the letters in the words", type: "riddle" }
+      }
+      
+      const availableRewards = clothingItems.filter(
+        item => !item.unlocked && item.level <= gameState.level + 1
+      )
+      
+      if (availableRewards.length > 0) {
+        const reward = availableRewards[Math.floor(Math.random() * availableRewards.length)]
+        const difficulty = reward.level <= 3 ? 'easy' : reward.level <= 6 ? 'medium' : 'hard'
+        const fallbackData = simpleFallback[difficulty]
+        
+        const fallbackPuzzle: Puzzle = {
+          id: `puzzle-${Date.now()}`,
+          question: fallbackData.question,
+          answer: fallbackData.answer,
+          difficulty,
+          type: fallbackData.type as 'riddle' | 'trivia',
+          hint: fallbackData.hint,
+          reward
+        }
+        
+        setGameState(prev => ({ ...prev, currentPuzzle: fallbackPuzzle }))
+        toast.success('Generated a backup puzzle for you!')
+      } else {
+        toast.error('No more items to unlock! You\'ve collected everything!')
+      }
     } finally {
       setIsGeneratingPuzzle(false)
     }
